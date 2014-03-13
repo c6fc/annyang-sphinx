@@ -134,8 +134,8 @@ function start(id) {
 	    }
 	}
 	output = recognizer.start();
-	if (output != Module.ReturnType.SUCCESS) {
-	   if (output == Module.ReturnType.BAD_STATE)
+	if (output != Module.ReturnType.SUCCESS)
+	   if (output == Module.ReturnType.BAD_STATE) {
          post({status: "error", command: "start", code: "state"});
       }
 	   if (output == Module.ReturnType.BAD_ARGUMENT) {
@@ -154,7 +154,7 @@ function start(id) {
 function stop() {
     if (recognizer) {
 	var output = recognizer.stop();
-	if (output != Module.ReturnType.SUCCESS) {
+	if (output != Module.ReturnType.SUCCESS)
 	   if (output == Module.ReturnType.BAD_STATE) {
          post({status: "error", command: "stop", code: "state"});
       }
@@ -165,7 +165,7 @@ function stop() {
          post({status: "error", command: "stop", code: "runtime"});
       }
 	    post({status: "error", command: "stop", code: output});
-	} else {
+	else {
 	    recognizer.getHypseg(segmentation);
 	    post({hyp: recognizer.getHyp(),
 		  hypseg: segmentation,

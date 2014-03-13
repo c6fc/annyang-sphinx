@@ -149,22 +149,23 @@
                   if(clb) {                         // If the callback exists
                      clb(data);                     // call it with its data.
                   }
-               }
                   
                   // This is a case when the recognizer has a new hypothesis
-               if (e.data.hasOwnProperty('hyp')) {
-                  var newHyp = e.data.hyp;
-                  if (e.data.hasOwnProperty('final') &&  e.data.final) {      // If the data is Final
-                     newHyp = "Final: " + newHyp;                             // Say so
+                  if (e.data.hasOwnProperty('hyp')) {
+                     var newHyp = e.data.hyp;
+                     if (e.data.hasOwnProperty('final') &&  e.data.final) {      // If the data is Final
+                        newHyp = "Final: " + newHyp;                             // Say so
+                     }
+                     
+                     console.log(newHyp);    // do something with the hypothesis
                   }
-                  
-                  console.log(newHyp);    // do something with the hypothesis
-               }
-               // This is the case when we have an error
-               if (e.data.hasOwnProperty('status') && (e.data.status == "error")) {
-                  console.log("** Error in " + e.data.command + " with code " + JSON.stringify(e.data.code));
-               }
-            },            
+                  // This is the case when we have an error
+                  if (e.data.hasOwnProperty('status') && (e.data.status == "error")) {
+                     console.log("** Error in " + e.data.command + " with code " + JSON.stringify(e.data.code));
+                  }
+               };
+            },
+            
             // Once the worker is fully loaded, we can call the initialize function
             initRecognizer();
          });

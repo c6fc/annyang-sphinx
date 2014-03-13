@@ -22,7 +22,7 @@
 
     <script>
       // These will be initialized later
-      var recognizer, recorder, callbackManager, audioContext;
+      var recognizer, recorder, callbackManager, audioContext, vizualizer;
       // Only when both recorder and recognizer do we have a ready application
       var recorderReady = recognizerReady = false;
 
@@ -57,6 +57,7 @@
       // Callback function once the user authorises access to the microphone
       // in it, we instanciate the recorder
       function startUserMedia(stream) {
+        console.log("[ startUserMediaStream Called ]");
         var input = audioContext.createMediaStreamSource(stream);
         // Firefox hack https://support.mozilla.org/en-US/questions/984179
         window.firefox_audio_hack = input; 
@@ -71,8 +72,7 @@
 
       // This starts recording. We first need to get the id of the grammar to use
       var startRecording = function() {
-        var id = document.getElementById('grammars').value;
-        if (recorder && recorder.start(id)) console.log("isRecording?: true"); // Show the listening indicator.
+        if (recorder && recorder.start()) console.log("isRecording?: true"); // Show the listening indicator.
       };
 
       // Stops recording
@@ -84,21 +84,10 @@
       // Called once the recognizer is ready
       // We then add the grammars to the input select tag and update the UI
       var recognizerReady = function() {
-           updateGrammars();
+           console.log("[ recognizerReady Called ]");
            recognizerReady = true;
            updateUI();
            console.log("** Recognizer ready");  // Status Change
-      };
-
-      // We get the grammars defined below and fill in the input select tag
-      var updateGrammars = function() {
-        var selectTag = document.getElementById('grammars');
-        for (var i = 0 ; i < grammarIds.length ; i++) {
-            var newElt = document.createElement('option');
-            newElt.value=grammarIds[i].id;
-            newElt.innerHTML = grammarIds[i].title;
-            selectTag.appendChild(newElt);
-        }                          
       };
 
       // This adds a grammar from the grammars array
@@ -106,30 +95,27 @@
       // a callback.
       // Once we are done adding all grammars, we can call
       // recognizerReady()
-      var feedGrammar = function(g, index, id) {
-        if (id && (grammarIds.length > 0)) grammarIds[0].id = id.id;
-        if (index < g.length) {
-          grammarIds.unshift({title: g[index].title})
-	  postRecognizerJob({command: 'addGrammar', data: g[index].g},
-                             function(id) {feedGrammar(grammars, index + 1, {id:id});});
-        } else {
-          recognizerReady();
-        }
+      var feedGrammar = function(grammar) {
+           console.log("[ feedGrammar Called ]");
+      	  postRecognizerJob({command: 'addGrammar', data: grammar}, function() {recognizerReady();});
       };
 
       // This adds words to the recognizer. When it calls back, we add grammars
       var feedWords = function(words) {
-           postRecognizerJob({command: 'addWords', data: words},
-                        function() {feedGrammar(grammars, 0);});
+           console.log("[ feedWords Called ]");
+           postRecognizerJob({command: 'addWords', data: words}, function() {feedGrammar(grammar, 0);});
       };
 
       // This initializes the recognizer. When it calls back, we add words
       var initRecognizer = function() {
+          console.log("[ initRecognizer Called ]");
           // You can pass parameters to the recognizer, such as : {command: 'initialize', data: [["-hmm", "my_model"], ["-fwdflat", "no"]]}
-          postRecognizerJob({command: 'initialize'},
-                            function() {
-                                        if (recorder) recorder.consumers = [recognizer];
-                                        feedWords(wordList);});
+          postRecognizerJob({command: 'initialize'}, function() {
+               if (recorder) {
+                  recorder.consumers = [recognizer];
+               }
+               feedWords(wordList);
+          });
       };
 
       // When the page is loaded, we spawn a new recognizer worker and call getUserMedia to
@@ -141,6 +127,8 @@
             // This is the onmessage function, once the worker is fully loaded
             worker.onmessage = function(e) {
                 // This is the case when we have a callback id to be called
+                console.log('worker received a message');
+                console.log(e);
                 if (e.data.hasOwnProperty('id')) {
                   var clb = callbackManager.get(e.data['id']);
                   var data = {};
@@ -158,7 +146,7 @@
                 }
                 // This is the case when we have an error
                 if (e.data.hasOwnProperty('status') && (e.data.status == "error")) {
-                  console.log("** Error in " + e.data.command + " with code " + e.data.code);
+                  console.log("** Error in " + e.data.command + " with code " + JSON.stringify(e.data.code));
                 }
             };
             // Once the worker is fully loaded, we can call the initialize function
@@ -174,10 +162,14 @@
         } catch (e) {
           console.log("** Error initializing Web Audio browser");
         }
-        if (navigator.getUserMedia) navigator.getUserMedia({audio: true}, startUserMedia, function(e) {
-                                        console.log("** No live audio input in this browser");
-                                    });
-        else console.log("** No web audio support in this browser");
+        
+        if (navigator.getUserMedia) {
+            navigator.getUserMedia({audio: true}, startUserMedia, function(e) {
+               console.log("** No live audio input in this browser");
+            });
+        } else {
+            console.log("** No web audio support in this browser");
+        }
 
       // Wiring JavaScript to the UI
       var startBtn = document.getElementById('startBtn');
@@ -190,15 +182,14 @@
 
        // This is the list of words that need to be added to the recognizer
        // This follows the CMU dictionary format
-      var wordList = [["ONE", "W AH N"], ["TWO", "T UW"], ["THREE", "TH R IY"], ["FOUR", "F AO R"], ["FIVE", "F AY V"], ["SIX", "S IH K S"], ["SEVEN", "S EH V AH N"], ["EIGHT", "EY T"], ["NINE", "N AY N"], ["ZERO", "Z IH R OW"], ["NEW-YORK", "N UW Y AO R K"], ["NEW-YORK-CITY", "N UW Y AO R K S IH T IY"], ["PARIS", "P AE R IH S"] , ["PARIS(2)", "P EH R IH S"], ["SHANGHAI", "SH AE NG HH AY"], ["SAN-FRANCISCO", "S AE N F R AE N S IH S K OW"], ["LONDON", "L AH N D AH N"], ["BERLIN", "B ER L IH N"], ["SUCKS", "S AH K S"], ["ROCKS", "R AA K S"], ["IS", "IH Z"], ["NOT", "N AA T"], ["GOOD", "G IH D"], ["GOOD(2)", "G UH D"], ["GREAT", "G R EY T"], ["WINDOWS", "W IH N D OW Z"], ["LINUX", "L IH N AH K S"], ["UNIX", "Y UW N IH K S"], ["MAC", "M AE K"], ["AND", "AE N D"], ["AND(2)", "AH N D"], ["O", "OW"], ["S", "EH S"], ["X", "EH K S"]];
-      // This grammar recognizes digits
-      var grammarDigits = {numStates: 1, start: 0, end: 0, transitions: [{from: 0, to: 0, word: "ONE"},{from: 0, to: 0, word: "TWO"},{from: 0, to: 0, word: "THREE"},{from: 0, to: 0, word: "FOUR"},{from: 0, to: 0, word: "FIVE"},{from: 0, to: 0, word: "SIX"},{from: 0, to: 0, word: "SEVEN"},{from: 0, to: 0, word: "EIGHT"},{from: 0, to: 0, word: "NINE"},{from: 0, to: 0, word: "ZERO"}]};
-      // This grammar recognizes a few cities names
-      var grammarCities = {numStates: 1, start: 0, end: 0, transitions: [{from: 0, to: 0, word: "NEW-YORK"}, {from: 0, to: 0, word: "NEW-YORK-CITY"}, {from: 0, to: 0, word: "PARIS"}, {from: 0, to: 0, word: "SHANGHAI"}, {from: 0, to: 0, word: "SAN-FRANCISCO"}, {from: 0, to: 0, word: "LONDON"}, {from: 0, to: 0, word: "BERLIN"}]};
+      var wordList = [["Deploy", "D IY P L OY"], ["Deploy(2)", "D AH P L OY"], ["the", "TH AH"], ["latest", "L AA T EH S T"], ["tag", "T AE G"], ["of", "AH V"], ["to", "T UW"],
+           ["IntelliQueue", "IH N T EH L AH K Y UW"], ["IntelliQueue(2)", "IH N T EH L IY K Y UW"], ["IntelliStats", "IH N T EH L AH S T AE T S"], ["IntelliStats(2)", "IH N T EH L IY S T AE T S"], 
+           ["IntelliDial", "IH N T EH L EH D AY AE L"], ["IntelliDial(2)", "IH N T EH L IY D AY AE L"], 
+           ["QTS", "K Y UW T IY EH S"], ["L3D", "EH L TH R IY D IY"], ["CFP", "S IY EH F P IY"], ["DR", "D IY AA R"]];
+
       // This is to play with beloved or belated OSes
-      var grammarOses = {numStates: 7, start: 0, end: 6, transitions: [{from: 0, to: 1, word: "WINDOWS"}, {from: 0, to: 1, word: "LINUX"}, {from: 0, to: 1, word: "UNIX"}, {from: 1, to: 2, word: "IS"}, {from: 2, to: 2, word: "NOT"}, {from: 2, to: 6, word: "GOOD"}, {from: 2, to: 6, word: "GREAT"}, {from: 1, to: 6, word: "ROCKS"}, {from: 1, to: 6, word: "SUCKS"}, {from: 0, to: 4, word: "MAC"}, {from: 4, to: 5, word: "O"}, {from: 5, to: 3, word: "S"}, {from: 3, to: 1, word: "X"}, {from: 6, to: 0, word: "AND"}]};
-      var grammars = [{title: "OSes", g: grammarOses}, {title: "Digits", g: grammarDigits}, {title: "Cities", g: grammarCities}];
-      var grammarIds = [];
+      var grammar = {numStates: 9, start: 0, end: 8, transitions: [{from: 0, to: 1, word: "Deploy"}, {from: 1, to: 2, word: "the"}, {from: 2, to: 3, word: "latest"}, {from: 3, to: 4, word: "tag"}, {from: 4, to: 5, word: "of"},
+         {from: 5, to: 6, word: "IntelliQueue"}, {from: 5, to: 6, word: "IntelliStats"}, {from: 5, to: 6, word: "IntelliDial"}, {from: 6, to: 7, word: "to"}, {from: 7, to: 8, word: "QTS"}, {from: 7, to: 8, word: "L3D"}, {from: 7, to: 8, word: "CFP"}, {from: 7, to: 8, word: "DR"}]};
     </script>
     <!-- These are the two JavaScript files you must load in the HTML,
     The recognizer is loaded through a Web Worker -->
