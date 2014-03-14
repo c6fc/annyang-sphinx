@@ -1,99 +1,42 @@
 (function undefined() {
    "use strict";
+   
+   var debug = true;
+   
+   
    // These will be initialized later
+   var root = this;
    var recognizer, recorder, callbackManager, audioContext, vizualizer;
    // Only when both recorder and recognizer do we have a ready application
-   var hasGrammar = false;
-   var hasWords = false;
-   var recorderReady = false;
-   var recognizerInit = false;
-   var recognizerReady = false;
-   var isReady = false;
    var readyCallback = false;
-  
-   
+   var listenCallback = false;
+   var hypCallback = false;
    var wordlist;
    
-   var root = this;
-   
-   var makeReady = function () {
-      isReady = true;
-   }
-   
-   var checkRecognizer = function () {
-      console.log('recognizer checked...');
-      if (recognizer && hasWords == true && hasGrammar == true) {
-         console.log('   ...ready!!');
-         recognizerReady = 1;
-         checkReady();
-      } else {
-         console.log('   ...not ready yet');
+   var state = {
+      init: false,
+      recorder: {
+         initialized: false,
+         isConsuming: false
+      },
+      recognizer: {
+         defined: false,
+         initialized: false,
+         isConsumed: false,
+         hasWords: false,
+         hasGrammar: false
+      },
+      annsphinx: {
+         ready: false,
+         listening: false
       }
-   }
-   
-   var checkRecognizerQueue = function () {
-      console.log('Checking Queue...');
-      if (hasWords !== false && hasWords !== true) {
-         console.log('  ...Sending words');
-         postRecognizerJob({command: 'addWords', data: hasWords}, function () {
-            checkRecognizerQueue();
-            console.log('words added');
-         });
-         
-         hasWords = true;
-         return true;
-      }
-      
-      if (hasGrammar !== false && hasGrammar !== true) {
-         console.log('  ...Sending grammar');
-         postRecognizerJob({command: 'addGrammar', data: hasGrammar}, function () {
-            checkRecognizerQueue();
-            console.log('grammar added');
-         });
-         
-         hasGrammar = true;
-         return true;
-      }
-   
-      checkRecognizer();   
-      console.log('No queue for recognizer');
-   }
-   
-   var checkReady = function () {
-      console.log('checkReady...');
-      if (recognizerReady && recorderReady) {
-         console.log('  ...yup');
-         if (!isReady) {
-            console.log('    ...saving it');
-            isReady = true;
-            if (readyCallback) readyCallback();
-         }
-      } else {
-         if (!recognizerReady) console.log('  ...waiting on recognizer');
-         if (!recorderReady) console.log('  ...waiting on recorder');
-      }
-   }
-   
-   var startUserMedia = function (stream) {
-      console.log('starting user media');
-      var input = audioContext.createMediaStreamSource(stream);
-      // Firefox hack https://support.mozilla.org/en-US/questions/984179
-      window.firefox_audio_hack = input; 
-      var audioRecorderConfig = {errorCallback: function(x) {console.log("** Error from recorder: " + x);}}; // Status change
-      recorder = new AudioRecorder(input, audioRecorderConfig);
-      // If a recognizer is ready, we pass it to the recorder
-      if (recognizer) recorder.consumers = [recognizer];
-      console.log('recorder ready!');
-      console.log(recorder);
-      recorderReady = 1;
-      checkReady();
    }
    
    var spawnWorker = function (workerURL, callback) {
-      console.log('spawning worker');
+      if (debug) console.log('Spawning new worker');
       recognizer = new Worker(workerURL);
+      state.recognizer.defined = true;
       recognizer.onmessage = function(event) {
-         console.log('recognizer initialized');
          callback(recognizer);
       };
       
@@ -101,20 +44,75 @@
    }
    
    var initRecognizer = function(callback) {
-      console.log('initRecognizer');
+      if (debug) console.log('Initializing recognizer');
       postRecognizerJob({command: 'initialize'}, function() {
          if (recorder) {
             recorder.consumers = [recognizer];
+            state.recognizer.isConsumed = true;
+            state.recorder.isConsuming = true;
+            if (debug) console.log('Recognizer consumed');
          }
          
-         console.log('Recognizer allegedly loaded');
-         recognizerInit = 1;
-         checkRecognizerQueue();
-         checkReady();
+         if (debug) console.log('Recognizer loaded');
+         state.recognizer.initialized = true;
+         if (state.recognizer.hasWords !== false && state.recognizer.hasWords !== true) annsphinx.addWords(state.recognizer.hasWords);
+         if (state.recognizer.hasGrammar !== false && state.recognizer.hasGrammar !== true) annsphinx.addGrammar(state.recognizer.hasGrammar);
          
+         checkReady();
       });
+   }
+   
+   var makeReady = function () {
+      isReady = true;
+   }
+   
+   var recognizerReady = function () {
+      for (var i in state.recognizer) {
+         if (state.recognizer[i] !== true) return false;
+      }
       
-      if (callback) callback();
+      return true;
+   }
+   
+   var recorderReady = function () {
+      for (var i in state.recorder) {
+         if (state.recorder[i] !== true) return false;
+      }
+      
+      return true;
+   }   
+   
+   var checkReady = function () {
+      if (recognizerReady() == true && recorderReady() == true) {
+         if (!state.annsphinx.ready) {
+            if (debug) console.log('Annsphinx is loaded and ready.');
+            state.annsphinx.ready = true;
+            if (readyCallback) readyCallback();
+         }
+      } else {
+         if (recognizerReady() != true && debug) console.log('Annsphinx waiting on recognizer');
+         if (recorderReady() != true && debug) console.log('Annsphinx waiting on recorder');
+      }
+   }
+   
+   var startUserMedia = function (stream) {
+      var input = audioContext.createMediaStreamSource(stream);
+      // Firefox hack https://support.mozilla.org/en-US/questions/984179
+      window.firefox_audio_hack = input; 
+      var audioRecorderConfig = {errorCallback: function(x) {console.log("** Error from recorder: " + x);}}; // Status change
+      recorder = new AudioRecorder(input, audioRecorderConfig);
+      state.recorder.initialized = true;
+      
+      // If a recognizer is ready, we pass it to the recorder
+      if (recognizer && !state.recognizer.isConsumed) {
+         recorder.consumers = [recognizer];
+         state.recognizer.isConsumed = true;
+         state.recorder.isConsuming = true;
+         if (debug) console.log('Recognizer consumed');
+      }
+      
+      if (debug) console.log('Recorder initialized');
+      checkReady();
    }
    
    var postRecognizerJob = function (message, callback) {
@@ -136,7 +134,7 @@
             
             // This is the onmessage function, once the worker is fully loaded
             worker.onmessage = function(e) {
-               console.log(e);
+               if (debug) console.log(e);
                // This is the case when we have a callback id to be called
                if (e.data.hasOwnProperty('id')) {
                   var clb = callbackManager.get(e.data['id']);
@@ -158,7 +156,12 @@
                      newHyp = "Final: " + newHyp;                             // Say so
                   }
                   
-                  console.log(newHyp);    // do something with the hypothesis
+                  // do something with the hypothesis
+                  if (hypCallback) {
+                     hypCallback(newHyp);
+                  } else {
+                    if (debug) console.log(newHyp);
+                  }
                }
                // This is the case when we have an error
                if (e.data.hasOwnProperty('status') && (e.data.status == "error")) {
@@ -192,6 +195,16 @@
          return this;
       },
       
+      addListenCallback: function (callback) {
+         if (callback) listenCallback = callback;
+         return this;
+      },
+      
+      addHypCallback: function (callback) {
+         if (callback) hypCallback = callback;
+         return this;
+      },
+      
       addConsumer: function (consumer) {
          if (recognizerReady && recorderReady) recorder.consumers = [consumer];
          return this;
@@ -199,6 +212,7 @@
       
       start: function(callback) {
          if (recorder && recorder.start() && callback) {
+            state.annsphinx.listening = true;
             callback();
          } else {
             console.log(recorder);
@@ -209,6 +223,7 @@
       
       stop: function (callback) {
          if (recorder && recorder.stop() && callback) {
+            state.annsphinx.listening = false;
             callback();
          } else {
             console.log(recorder);
@@ -223,18 +238,18 @@
             wordlist = words;
          }
          
-         if (recognizerInit == 1) {
+         if (state.recognizer.initialized == true) {
             postRecognizerJob({command: 'addWords', data: wordlist}, function () {
-               hasWords = true;
-               checkRecognizer();
-               console.log('words added');
+               state.recognizer.hasWords = true;
+
+               if (debug) console.log('words added');
             });
             
             if (callback) callback();
          } else {
          
-            hasWords = wordlist;
-            console.log('words queued');
+            state.recognizer.hasWords = wordlist;
+            if (debug) console.log('words queued');
             if (callback) callback();
          }
          
@@ -242,25 +257,25 @@
       },
       
       addGrammar: function (grammar, callback) {
-         if (recognizerInit == 1) {
+         if (state.recognizer.initialized == true) {
             postRecognizerJob({command: 'addGrammar', data: grammar}, function () {
-               hasGrammar = true;
-               checkRecognizer();
-               console.log('grammar added');
+               state.recognizer.hasGrammar = true;
+
+               if (debug) console.log('grammar added');
             });
 
             if (callback) callback()
          } else {
          
-            hasGrammar = grammar;
-            console.log('grammar queued');
+            state.recognizer.hasGrammar = grammar;
+            if (debug) console.log('grammar queued');
             if (callback) callback();
          }
          return this;
       },
       
       onReady: function (callback) {
-         if (isReady) {
+         if (state.annsphinx.ready) {
             callback();
          } else {
             readyCallback = callback;

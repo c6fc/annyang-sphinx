@@ -10,34 +10,21 @@
       <li>This demo works on recent versions of Chrome and Firefox with the Web Audio API, make sure it works for you and actually records audio.</li>
       <li>Press "Start" and speak</li>
     </ul>
-    <select id="grammars"></select>
-    <button id="startBtn" onClick="window.annsphinx.start(amStarted)">Start</button>
-    <button id="stopBtn" onClick="window.annsphinx.stop(amStopped)">Stop</button>
+
+    <input type="text" size="40" id="words" onChange=>
+
     <span id="recording-indicator" style="border-radius: 10px; -moz-border-radius: 10px; -webkit-border-radius: 10px; width: 20px; height: 20px; background: red;"></span>
 
     <script>
-      function amReady(what) {
-         console.log('I am ready');
-         window.annsphinx.addWords(wordList, 0, function () {window.annsphinx.addGrammar(grammar)}).onReady(function () {console.log('Legit'); startBtn.disabled = false; stopBtn.disabled = false;});
-         startBtn.disabled = stopBtn.disabled = false;
-      }
-      
-      function amStarted() {
-         console.log('I am listening');
-      }
-
-      function amStopped() {
-         console.log('I am listening');
-      }
-      
       window.onload = function() {
-         window.annsphinx.init(amReady).onReady(function () {console.log('Legit'); startBtn.disabled = false; stopBtn.disabled = false;});
-
-         // Wiring JavaScript to the UI
-         var startBtn = document.getElementById('startBtn');
-         var stopBtn = document.getElementById('stopBtn');
-         startBtn.disabled = true;
-         stopBtn.disabled = true;
+         window.annsphinx.init().addHypCallback(function(text) {
+            document.getElementById('words').value = text;
+         }).addWords(wordList, 0, function () {
+            window.annsphinx.addGrammar(grammar)
+         }).onReady(function () {
+            console.log('Listening...');
+            window.annsphinx.start();
+         });
       };
 
        // This is the list of words that need to be added to the recognizer
