@@ -6,9 +6,10 @@
    
    // These will be initialized later
    var root = this;
-   var recognizer, recorder, callbackManager, audioContext, vizualizer;
+   var recognizer, recorder, callbackManager, audioContext;
    // Only when both recorder and recognizer do we have a ready application
    var readyCallback = false;
+   var listenCallback = false;
    var hypCallback = false;
    var wordlist;
    
@@ -27,7 +28,11 @@
       },
       annsphinx: {
          ready: false,
-         listening: false
+         listening: false,
+         grammarEnd: false,
+         lastHyp: false,
+         confidence: 0,
+         minConfidence: 1
       }
    }
    
@@ -42,9 +47,9 @@
       recognizer.postMessage('');
    }
    
-   var initRecognizer = function(callback) {
+   var initRecognizer = function(data) {
       if (debug) console.log('Initializing recognizer');
-      postRecognizerJob({command: 'initialize'}, function() {
+      postRecognizerJob({command: 'initialize', data: data}, function() {
          if (recorder) {
             recorder.consumers = [recognizer];
             state.recognizer.isConsumed = true;
@@ -127,7 +132,8 @@
    
    root.annsphinx = {
    
-      init: function(notify) {
+      init: function(data, notify) {
+         var recognizerData = data || {};
          callbackManager = new CallbackManager();
          spawnWorker("js/recognizer.js", function(worker) {
             
@@ -152,12 +158,22 @@
                if (e.data.hasOwnProperty('hyp')) {
                   var newHyp = e.data.hyp;
                   if (e.data.hasOwnProperty('final') &&  e.data.final) {      // If the data is Final
-                     newHyp = "Final: " + newHyp;                             // Say so
+                     // Do nothing for now.
                   }
                   
                   // do something with the hypothesis
                   if (hypCallback) {
-                     hypCallback(newHyp);
+                     if (state.annsphinx.lastHyp = newHyp) {
+                        state.annsphinx.confidence++;
+                     } else {
+                        state.annsphinx.lastHyp = newHyp;
+                        state.annsphinx.confidence = 0;
+                     }
+                     
+                     if (state.annsphinx.confidence = state.annsphinx.minConfidence) {
+                        hypCallback(newHyp);
+                     }
+                     
                   } else {
                     if (debug) console.log(newHyp);
                   }
@@ -168,7 +184,7 @@
                }
             },            
             // Once the worker is fully loaded, we can call the initialize function
-            initRecognizer();
+            initRecognizer(recognizerData);
          });
          
          try {
@@ -180,27 +196,41 @@
             
          } catch (e) {
             if (notify) notify({error: 'Error initializing audio in browser'});
+            if (debug) console.log('Recorder Error: Error initializing audio in browser');
          }
 
          if (navigator.getUserMedia) {
             navigator.getUserMedia({audio: true}, startUserMedia, function(e) {
                if (notify) notify({error: 'No input available'});
+               if (debug) console.log('Recorder Error: No input available');
             });
             
          } else {
             if (notify) notify({error: 'Live audio not supported in this browser'});
+            if (debug) console.log('Recorder Error: Live audio not supported in this browser');
          }
+         
+         return this;
+      },
+      
+      requireConfidence: function (minimum) {
+         if (minimum > 0 && minimum < 10) {
+            state.annsphinx.minConfidence = minimum;
+         } else {
+            if (debug) console.log('Specified confidence out of range');
          
          return this;
       },
       
       addListenCallback: function (callback) {
          if (callback) listenCallback = callback;
+         if (debug) console.log('Listen Callback added');
          return this;
       },
       
       addHypCallback: function (callback) {
          if (callback) hypCallback = callback;
+         if (debug) console.log('Hypothesis Callback added');
          return this;
       },
       
@@ -210,9 +240,10 @@
       },
       
       start: function(callback) {
-         if (recorder && recorder.start() && callback) {
+         if (recorder && recorder.start()) {
             state.annsphinx.listening = true;
-            callback();
+            if (listenCallback) listenCallback(true);
+            if (callback) callback();
          } else {
             console.log(recorder);
          }
@@ -221,9 +252,11 @@
       },
       
       stop: function (callback) {
-         if (recorder && recorder.stop() && callback) {
+         if (recorder) {
+            recorder.stop()
             state.annsphinx.listening = false;
-            callback();
+            if (listenCallback) listenCallback(false);
+            if (callback) callback();
          } else {
             console.log(recorder);
          }
@@ -240,7 +273,7 @@
          if (state.recognizer.initialized == true) {
             postRecognizerJob({command: 'addWords', data: wordlist}, function () {
                state.recognizer.hasWords = true;
-
+               checkReady();
                if (debug) console.log('words added');
             });
             
@@ -259,9 +292,11 @@
          if (state.recognizer.initialized == true) {
             postRecognizerJob({command: 'addGrammar', data: grammar}, function () {
                state.recognizer.hasGrammar = true;
-
+               checkReady();
                if (debug) console.log('grammar added');
             });
+            
+            state.annsphinx.grammarEnd = grammar["end"];
 
             if (callback) callback()
          } else {

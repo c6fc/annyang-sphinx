@@ -10,28 +10,35 @@
       <li>This demo works on recent versions of Chrome and Firefox with the Web Audio API, make sure it works for you and actually records audio.</li>
       <li>Press "Start" and speak</li>
     </ul>
-    <select id="grammars"></select>
-    <button id="startBtn" onClick="window.annsphinx.start()">Start</button>
-    <button id="stopBtn" onClick="window.annsphinx.stop(amStopped)">Stop</button>
+
+    <input type="text" size="40" id="words" onChange=>
+
     <span id="recording-indicator" style="border-radius: 10px; -moz-border-radius: 10px; -webkit-border-radius: 10px; width: 20px; height: 20px; background: red;"></span>
 
     <script>
-      function amReady(what) {
-         window.annsphinx.onReady(function () {
+      window.onload = function() {
+         window.annsphinx.init([["-fwdflat", "yes"]], function(data) {
+            if (data["error"]) {
+               document.getElementById('words').value = "Audio Error: " + data["error"];
+            }
+         }).requireConfidence(1).addHypCallback(function(text) {
+            document.getElementById('words').value = text;
+            if (text.split(" ").length == 8) {
+               window.annsphinx.stop();
+            }
+         }).addListenCallback(function (listening) {
+            console.log ('listenCallback called');
+            if (listening == true) {
+               document.getElementById('recording-indicator').innerHTML = "&nbsp;"
+            } else {
+               document.getElementById('recording-indicator').innerHTML = ""
+            }
+         }).addWords(wordList, 0, function () {
+            window.annsphinx.addGrammar(grammar)
+         }).onReady(function () {
             console.log('Listening...');
             window.annsphinx.start();
          });
-      }
-      
-      window.onload = function() {
-         window.annsphinx.init(amReady).addWords(wordList, 0, function () {
-            window.annsphinx.addGrammar(grammar)
-         }).onReady(function () {
-            console.log('Legit');
-            startBtn.disabled = false;
-            stopBtn.disabled = false;
-         });
-
       };
 
        // This is the list of words that need to be added to the recognizer
